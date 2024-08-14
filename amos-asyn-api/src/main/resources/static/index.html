@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RADET Report Generation</title>
+    <style>
+        #progress-bar {
+            width: 100%;
+            background-color: #f3f3f3;
+        }
+
+        #progress {
+            width: 0%;
+            height: 30px;
+            background-color: #4caf50;
+            text-align: center;
+            line-height: 30px;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+<h1>RADET Report Generation</h1>
+
+<form id="radetForm">
+    <label for="facilityId">Facility ID:</label>
+    <input type="number" id="facilityId" name="facilityId" required>
+    <br><br>
+    <label for="startDate">Start Date:</label>
+    <input type="date" id="startDate" name="startDate" required>
+    <br><br>
+    <label for="endDate">End Date:</label>
+    <input type="date" id="endDate" name="endDate" required>
+    <br><br>
+    <button type="submit">Generate Report</button>
+</form>
+
+<br><br>
+
+<div id="progress-bar">
+    <div id="progress">0%</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.5.1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+<script>
+    const form = document.getElementById('radetForm');
+    const progressBar = document.getElementById('progress');
+
+    let socket = new SockJS('/ws-progress');
+    let stompClient = Stomp.over(socket);
+
+    stompClient.connect({}, function (frame) {
+        console.log('Connected: ' + frame);
+        let numberOfRecords = 0;
+        let currentRecord = 0;
+
+        stompClient.subscribe('/topic/progress', function (message) {
+            const messageBody = message.body;
+            if (messageBody.startsWith("total:")) {
+                if (numberOfRecords === 0) {
+                    numberOfRecords = parseInt(messageBody.split(":")[1]);
+                    console.log("Total number of records: " + numberOfRecords);
+                }
+            }
+
+            if (messageBody.startsWith("currentValue:")) {
+                currentRecord = parseInt(messageBody.split(":")[1]);
+                console.log("Current: " + currentRecord);
+            }
+            const progressPercentage = Math.round((currentRecord / numberOfRecords) * 100);
+            updateProgress(progressPercentage);
+            if (progressPercentage === 100) {
+                setTimeout(() => {
+                    updateProgress("RADET report generation complete");
+                }, 1000);
+            }
+        });
+
+    });
+
+    form.addEventListener('submit', function (event) {
+        event.preventDefault();
+
+        const facilityId = document.getElementById('facilityId').value;
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+
+        fetch(`/radet?facilityId=${facilityId}&startDate=${startDate}&endDate=${endDate}`, {
+            method: 'GET'
+        }).then(response => {
+            if (response.ok) {
+                updateProgress(100);
+            }
+        });
+    });
+
+    function updateProgress(value) {
+        if (typeof value === 'number') {
+            progressBar.style.width = value + '%';
+            progressBar.innerHTML = value + '%';
+        } else {
+            progressBar.style.width = '100%'; // Assume complete if it's a string message
+            progressBar.innerHTML = value; // Display the string message directly
+        }
+    }
+
+</script>
+</body>
+</html>
